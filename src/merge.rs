@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs::canonicalize;
-use std::io::{Write};
-use std::ops::Index;
 use std::path::{PathBuf};
 use std::process::exit;
-use calamine::{open_workbook_auto, DataType, Error, Reader};
+use calamine::{open_workbook_auto, Error, Reader};
 use glob::{GlobError};
 use xlsxwriter::{Format, Workbook, XlsxError};
 
@@ -89,7 +87,7 @@ fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to:
     let mut row_index = 2;
     for (key, row_data) in to.iter() {
         for (col_i, header) in headers.iter().enumerate() {
-            let value ;
+            let value;
             let default_value = String::new();
             if header == update_column {
                 match from.get(key) {
