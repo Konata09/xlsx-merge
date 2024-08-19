@@ -1,0 +1,10 @@
+[package]
+name = "xlsx_merge"
+version = "0.1.0"
+edition = "2021"
+exclude = ["tests/**/*"]
+
+[dependencies]
+"calamine" = "0.25"
+"xlsxwriter" = "0.6"
+glob = "0.3.1"
