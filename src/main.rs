@@ -1,5 +1,5 @@
 use actix_web::{middleware, web, App, HttpServer, Responder, HttpResponse, Error};
-use actix_files::{NamedFile, Files};
+use actix_files::{Files};
 use actix_multipart::{
     form::{
         tempfile::{TempFile, TempFileConfig},
@@ -8,8 +8,28 @@ use actix_multipart::{
     },
 };
 use serde_derive::Serialize;
+use mime_guess::from_path;
+use rust_embed::Embed;
 
 mod merge;
+
+
+#[derive(Embed)]
+#[folder = "public/"]
+struct Asset;
+
+fn handle_embedded_file(path: &str) -> HttpResponse {
+    match Asset::get(path) {
+        Some(content) => HttpResponse::Ok()
+            .content_type(from_path(path).first_or_octet_stream().as_ref())
+            .body(content.data.into_owned()),
+        None => HttpResponse::NotFound().body("404 Not Found"),
+    }
+}
+
+async fn index() -> Result<impl Responder, Error> {
+    Ok(handle_embedded_file("index.html"))
+}
 
 #[derive(Serialize)]
 struct Response<T> {
@@ -23,10 +43,6 @@ struct UploadForm {
     source_file: TempFile,
     ref_file: TempFile,
     column: Text<String>,
-}
-
-async fn index() -> std::io::Result<NamedFile> {
-    NamedFile::open("public/index.html")
 }
 
 async fn handle_merge_post(
