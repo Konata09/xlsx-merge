@@ -97,8 +97,9 @@ jobs:
         {
           echo 'commits<<EOF'
           git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s  "
-          echo EOF
-        } >> "$GITHUB_ENV"
+          echo ""
+          echo 'EOF'
+        } >> $GITHUB_ENV
 
     - name: Create GitHub Release
       id: create_release
