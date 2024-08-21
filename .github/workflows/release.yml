@@ -41,10 +41,11 @@ jobs:
           ${{ runner.os }}-cargo-index-
 
     - name: Build project
+      uses: actions-rs/cargo@v1
       with: 
         use-cross: true
-        command: cargo
-        args: build --release --target ${{ matrix.target }}
+        command: build
+        args: --release --target ${{ matrix.target }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
