@@ -94,8 +94,11 @@ jobs:
     - name: Get commit details between releases
       id: get_commit_details
       run: |
-        commits=$(git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s")
-        echo "commits=$commits" >> $GITHUB_ENV
+        {
+          echo 'commits<<EOF'
+          commits=$(git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s  ")
+          echo EOF
+        } >> "$GITHUB_ENV"
 
     - name: Create GitHub Release
       id: create_release
