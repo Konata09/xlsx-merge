@@ -41,7 +41,7 @@ jobs:
           ${{ runner.os }}-cargo-index-
 
     - name: Install Cross Compiler
-      if: ${{ matrix.target == aarch64-unknown-linux-gnu }}
+      if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
       run: |
         sudo apt update
         sudo apt install -y aarch64-unknown-linux-gnu   
