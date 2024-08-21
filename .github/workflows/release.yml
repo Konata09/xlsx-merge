@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
 
     steps:
     - name: Checkout code
@@ -19,6 +22,9 @@ jobs:
         toolchain: stable
         profile: minimal
         override: true
+
+    - name: Install target
+      run: rustup target add ${{ matrix.target }}
 
     - name: Cache cargo registry
       uses: actions/cache@v3
@@ -37,13 +43,13 @@ jobs:
           ${{ runner.os }}-cargo-index-
 
     - name: Build project
-      run: cargo build --release
+      run: cargo build --release --target ${{ matrix.target }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
-        name: xlsx_merge
-        path: target/release/xlsx_merge
+        name: xlsx_merge-${{ matrix.target }}
+        path: target/${{ matrix.target }}/release/xlsx_merge
 
   release:
     needs: build
@@ -53,11 +59,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Download artifact
+    - name: Download x86_64 artifact
       uses: actions/download-artifact@v3
       with:
-        name: xlsx_merge
-        path: ./artifact
+        name: xlsx_merge-x86_64-unknown-linux-gnu
+        path: ./artifact/x86_64
+
+    - name: Download aarch64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: xlsx_merge-aarch64-unknown-linux-gnu
+        path: ./artifact/aarch64
 
     - name: Extract version from Cargo.toml
       id: extract_version
@@ -76,12 +88,22 @@ jobs:
         draft: false
         prerelease: false
 
-    - name: Upload Release Asset
+    - name: Upload x86_64 Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifact/xlsx_merge
-        asset_name: xlsx_merge
+        asset_path: ./artifact/x86_64/xlsx_merge
+        asset_name: xlsx_merge-x86_64
+        asset_content_type: application/octet-stream
+
+    - name: Upload aarch64 Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifact/aarch64/xlsx_merge
+        asset_name: xlsx_merge-aarch64
         asset_content_type: application/octet-stream
