@@ -43,7 +43,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: xlsx_merge
-        path: target/release/
+        path: target/release/xlsx_merge
 
   release:
     needs: build
