@@ -19,7 +19,7 @@ jobs:
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
-        target: ${{ matrix.target }}
+        target: matrix.target
         toolchain: stable
         profile: minimal
         override: true
@@ -40,12 +40,14 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-index-
 
+    - name: Install Cross Compiler
+      if: ${{ matrix.target == aarch64-unknown-linux-gnu }}
+      run: |
+        sudo apt update
+        sudo apt install -y aarch64-unknown-linux-gnu   
+
     - name: Build project
-      uses: actions-rs/cargo@v1
-      with: 
-        use-cross: true
-        command: build
-        args: --release --target ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
