@@ -59,14 +59,20 @@ jobs:
         name: xlsx_merge
         path: ./artifact
 
+    - name: Extract version from Cargo.toml
+      id: extract_version
+      run: |
+        version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+        echo "version=$version" >> $GITHUB_ENV
+
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.sha }}
-        release_name: Release ${{ github.sha }}
+        tag_name: v${{ env.version }}
+        release_name: Release v${{ env.version }}
         draft: false
         prerelease: false
 
