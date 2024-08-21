@@ -81,6 +81,20 @@ jobs:
         version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
         echo "version=$version" >> $GITHUB_ENV
 
+    - name: Get previous release tag
+      id: get_previous_release
+      run: |
+        previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+          jq -r .tag_name)
+        echo "previous_tag=$previous_tag" >> $GITHUB_ENV
+
+    - name: Get commit details between releases
+      id: get_commit_details
+      run: |
+        commits=$(git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s")
+        echo "commits=$commits" >> $GITHUB_ENV
+
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1
@@ -89,6 +103,9 @@ jobs:
       with:
         tag_name: v${{ env.version }}
         release_name: Release v${{ env.version }}
+        body: |
+          Commits since last release:
+          ${{ env.commits }}
         draft: false
         prerelease: false
 
