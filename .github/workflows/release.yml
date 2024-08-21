@@ -47,7 +47,7 @@ jobs:
         sudo apt install -y gcc-aarch64-linux-gnu
 
     - name: Build project
-      run: cargo build --release --target ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }} --config target.aarch64-unknown-linux-gnu.linker=\"gcc-aarch64-linux-gnu\"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
