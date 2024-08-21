@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merge i18n XLSX Files</title>
+</head>
+<body>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+    }
+
+    .container {
+        max-width: 600px;
+        margin: 50px auto;
+        padding: 20px;
+        background-color: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+        text-align: center;
+        color: #333;
+    }
+
+    form {
+        display: flex;
+        flex-direction: column;
+    }
+
+    label {
+        margin-bottom: 5px;
+        color: #555;
+    }
+
+    input[type="text"], input[type="file"] {
+        margin-bottom: 15px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    input[type="submit"] {
+        padding: 10px;
+        background-color: #28a745;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    input[type="submit"]:hover {
+        background-color: #218838;
+    }
+
+    .download-link {
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .download-link a {
+        color: #007bff;
+        text-decoration: none;
+    }
+
+    .download-link a:hover {
+        text-decoration: underline;
+    }
+</style>
+<div class="container">
+    <h1>Merge XLSX Files</h1>
+    <form id="mergeForm" action="/merge" method="post" enctype="multipart/form-data">
+        <label for="source_file">Source File:</label>
+        <input type="file" id="source_file" name="source_file" accept=".xlsx"><br>
+        <label for="ref_file">Reference File:</label>
+        <input type="file" id="ref_file" name="ref_file" accept=".xlsx"><br>
+        <label for="column">Column:</label>
+        <input type="text" id="column" name="column"><br>
+        <input type="submit" value="Merge" id="submit">
+    </form>
+    <div class="download-link" id="downloadLink"></div>
+</div>
+
+<script>
+    document.getElementById('mergeForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        document.getElementById('submit').disabled = true;
+        const formData = new FormData(this);
+        const response = await fetch('/merge', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        if (response.ok && result.ret == 0) {
+            document.getElementById('downloadLink').innerHTML = `<a href="${result.data}" download>Download Merged File</a>`;
+        } else {
+            document.getElementById('downloadLink').innerHTML = `<p style="color: red;">${result.msg}</p>`;
+        }
+        document.getElementById('submit').disabled = false;
+    });
+</script>
+</div>
+</body>
+</html>

@@ -1,21 +1,19 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs::canonicalize;
 use std::path::{PathBuf};
-use std::process::exit;
 use calamine::{open_workbook_auto, Error, Reader};
 use glob::{GlobError};
 use xlsxwriter::{Format, Workbook, XlsxError};
 
 #[derive(Debug)]
 #[allow(dead_code)]
-enum FileStatus {
+pub(crate) enum FileStatus {
     VbaError(Error),
     RangeError(Error),
     Glob(GlobError),
 }
 
-pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str) {
+pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str, output_file: &str) -> Result<(), FileStatus> {
     let current_dir = env::current_dir().expect("Failed to get current directory");
     let from_file = current_dir.join(ref_file);
     let to_file = current_dir.join(source_file);
@@ -28,7 +26,7 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str) {
         }
         Err(e) => {
             println!("{:?}", e);
-            exit(-1)
+            return Err(e);
         }
     };
 
@@ -40,7 +38,7 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str) {
         }
         Err(e) => {
             println!("{:?}", e);
-            exit(-1)
+            return Err(e);
         }
     };
 
@@ -48,20 +46,22 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str) {
         Ok(headers) => headers,
         Err(e) => {
             println!("{:?}", e);
-            exit(-1)
+            return Err(e);
         }
     };
 
-    let target_file = format!("{}/{}_merged.xlsx", canonicalize(&to_file_clone).unwrap().parent().unwrap().display(), to_file_clone.file_stem().unwrap().to_str().unwrap());
+    let target_file = output_file;
 
-    match write_to_file(target_file.as_str(), from_data, to_data, column, headers) {
+    match write_to_file(target_file, from_data, to_data, column, headers) {
         Ok(()) => {}
         Err(e) => {
             println!("Error occur: {:?}", e);
+            return Err(FileStatus::VbaError(Error::Msg("Failed to write to file")));
         }
     }
 
     println!("Done.");
+    Ok(())
 }
 
 fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to: HashMap<String, HashMap<String, String>>, update_column: &str, headers: Vec<String>) -> Result<(), XlsxError> {
