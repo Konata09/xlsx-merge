@@ -123,7 +123,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/merge").route(web::post().to(handle_merge_post)))
             .service(Files::new("/output", "/tmp/xlsx_merge/output/"))
     })
-        .bind(("127.0.0.1", 8080))?
+        .bind(("0.0.0.0", 8080))?
         .workers(2)
         .run()
         .await
