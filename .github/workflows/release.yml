@@ -10,151 +10,136 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+        target: [ x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu ]
+
+    outputs:
+      should_release: ${{ steps.check_version.outputs.should_release }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        target: ${{ matrix.target }}
-        toolchain: stable
-        profile: minimal
-        override: true
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+          echo "version=$version" >> $GITHUB_ENV
 
-    - name: Cache cargo registry
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target }}-cargo-registry-
+      - name: Get previous release tag
+        id: get_previous_release
+        run: |
+          previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            jq -r .tag_name)
+          echo "previous_tag=$previous_tag" >> $GITHUB_ENV
 
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-${{ matrix.target }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target }}-cargo-index-
+      - name: Check if version is already released
+        id: check_version
+        run: |
+          if [ "v${{ env.version }}" == "${{ env.previous_tag }}" ]; then
+            echo "Version ${{ env.version }} is already released. Skipping build."
+            echo "::set-output name=should_release::false"
+          else
+            echo "::set-output name=should_release::true"
+          fi
 
-    - name: Install Cross Compiler
-      if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' }}
-      run: |
-        sudo apt update
-        sudo apt install -y gcc-aarch64-linux-gnu
+      - name: Set up Rust
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: actions-rs/toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+          toolchain: stable
+          profile: minimal
+          override: true
 
-    - name: Extract version from Cargo.toml
-      id: extract_version
-      run: |
-        version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
-        echo "version=$version" >> $GITHUB_ENV
+      - name: Cache cargo registry
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-registry-
 
-    - name: Get previous release tag
-      id: get_previous_release
-      run: |
-        previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
-          jq -r .tag_name)
-        echo "previous_tag=$previous_tag" >> $GITHUB_ENV
+      - name: Cache cargo index
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-index-
 
-    - name: Check if version is already released
-      id: check_version
-      run: |
-        if [ "v${{ env.version }}" == "${{ env.previous_tag }}" ]; then
-          echo "Version ${{ env.version }} is already released. Skipping build."
-          exit 0
-        fi
+      - name: Install Cross Compiler
+        if: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && steps.check_version.outputs.should_release == 'true' }}
+        run: |
+          sudo apt update
+          sudo apt install -y gcc-aarch64-linux-gnu
 
-    - name: Build project
-      if: steps.check_version.outcome != 'success'
-      run: cargo build --release --target ${{ matrix.target }} --config target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\"
+      - name: Build project
+        if: steps.check_version.outputs.should_release == 'true'
+        run: cargo build --release --target ${{ matrix.target }} --config target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\"
 
-    - name: Upload artifact
-      if: steps.check_version.outcome != 'success'
-      uses: actions/upload-artifact@v3
-      with:
-        name: xlsx_merge-${{ matrix.target }}
-        path: target/${{ matrix.target }}/release/xlsx_merge
+      - name: Upload artifact
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: xlsx_merge-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/xlsx_merge
 
   release:
     needs: build
+    if: needs.build.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-    - name: Download x86_64 artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: xlsx_merge-x86_64-unknown-linux-gnu
-        path: ./artifact/x86_64
+      - name: Download x86_64 artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: xlsx_merge-x86_64-unknown-linux-gnu
+          path: ./artifact/x86_64
 
-    - name: Download aarch64 artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: xlsx_merge-aarch64-unknown-linux-gnu
-        path: ./artifact/aarch64
+      - name: Download aarch64 artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: xlsx_merge-aarch64-unknown-linux-gnu
+          path: ./artifact/aarch64
 
-    - name: Extract version from Cargo.toml
-      id: extract_version
-      run: |
-        version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
-        echo "version=$version" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ env.version }}
+          release_name: Release v${{ env.version }}
+          body: |
+            Commits since last release:
+            ${{ env.commits }}
+          draft: false
+          prerelease: false
 
-    - name: Get previous release tag
-      id: get_previous_release
-      run: |
-        previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
-          jq -r .tag_name)
-        echo "previous_tag=$previous_tag" >> $GITHUB_ENV
+      - name: Upload x86_64 Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifact/x86_64/xlsx_merge
+          asset_name: xlsx_merge-linux-x86_64
+          asset_content_type: application/octet-stream
 
-    - name: Get commit details between releases
-      id: get_commit_details
-      run: |
-        {
-          echo 'commits<<EOF'
-          git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s  "
-          echo ""
-          echo 'EOF'
-        } >> $GITHUB_ENV
-
-    - name: Create GitHub Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ env.version }}
-        release_name: Release v${{ env.version }}
-        body: |
-          Commits since last release:
-          ${{ env.commits }}
-        draft: false
-        prerelease: false
-
-    - name: Upload x86_64 Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifact/x86_64/xlsx_merge
-        asset_name: xlsx_merge-linux-x86_64
-        asset_content_type: application/octet-stream
-
-    - name: Upload aarch64 Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifact/aarch64/xlsx_merge
-        asset_name: xlsx_merge-linux-aarch64
-        asset_content_type: application/octet-stream
+      - name: Upload aarch64 Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifact/aarch64/xlsx_merge
+          asset_name: xlsx_merge-linux-aarch64
+          asset_content_type: application/octet-stream
