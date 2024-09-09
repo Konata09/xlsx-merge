@@ -110,6 +110,30 @@ jobs:
           name: xlsx_merge-aarch64-unknown-linux-gnu
           path: ./artifact/aarch64
 
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+          echo "version=$version" >> $GITHUB_ENV
+
+      - name: Get previous release tag
+        id: get_previous_release
+        run: |
+          previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            jq -r .tag_name)
+          echo "previous_tag=$previous_tag" >> $GITHUB_ENV
+
+      - name: Get commit details between releases
+        id: get_commit_details
+        run: |
+          {
+            echo 'commits<<EOF'
+            git log ${{ env.previous_tag }}..HEAD --pretty=format:"- \`%h\`: %s  "
+            echo ""
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
