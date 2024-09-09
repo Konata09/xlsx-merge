@@ -15,10 +15,10 @@ RUN cargo build --release
 
 FROM debian:12-slim
 
-COPY --from=builder /usr/src/xlsx-merge/target/release/xlsx-merge /usr/local/bin/xlsx-merge
+COPY --from=builder /usr/src/xlsx-merge/target/release/xlsx_merge /usr/local/bin/xlsx_merge
 
 WORKDIR /usr/local/bin
 
 EXPOSE 8080
 
-CMD ["xlsx-merge"]
+CMD ["xlsx_merge"]
