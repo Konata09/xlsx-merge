@@ -46,10 +46,34 @@ jobs:
         sudo apt update
         sudo apt install -y gcc-aarch64-linux-gnu
 
+    - name: Extract version from Cargo.toml
+      id: extract_version
+      run: |
+        version=$(grep '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+        echo "version=$version" >> $GITHUB_ENV
+
+    - name: Get previous release tag
+      id: get_previous_release
+      run: |
+        previous_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+          jq -r .tag_name)
+        echo "previous_tag=$previous_tag" >> $GITHUB_ENV
+
+    - name: Check if version is already released
+      id: check_version
+      run: |
+        if [ "v${{ env.version }}" == "${{ env.previous_tag }}" ]; then
+          echo "Version ${{ env.version }} is already released. Skipping build."
+          exit 0
+        fi
+
     - name: Build project
+      if: steps.check_version.outcome != 'success'
       run: cargo build --release --target ${{ matrix.target }} --config target.aarch64-unknown-linux-gnu.linker=\"aarch64-linux-gnu-gcc\"
 
     - name: Upload artifact
+      if: steps.check_version.outcome != 'success'
       uses: actions/upload-artifact@v3
       with:
         name: xlsx_merge-${{ matrix.target }}
