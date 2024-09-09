@@ -4,6 +4,10 @@ version = "1.1.3"
 edition = "2021"
 exclude = ["tests/**/*"]
 
+[[bin]]
+name = "xlsx_merge"
+path = "src/main.rs"
+
 [dependencies]
 "calamine" = "0.25"
 "xlsxwriter" = "0.6"
