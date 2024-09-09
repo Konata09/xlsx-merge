@@ -17,4 +17,6 @@ COPY --from=builder /usr/src/xlsx-merge/target/release/xlsx-merge /usr/local/bin
 
 WORKDIR /usr/local/bin
 
+EXPOSE 8080
+
 CMD ["xlsx-merge"]
