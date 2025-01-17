@@ -1,18 +1,15 @@
-use actix_web::{middleware, web, App, HttpServer, Responder, HttpResponse, Error};
-use actix_files::{Files};
-use actix_multipart::{
-    form::{
-        tempfile::{TempFile, TempFileConfig},
-        MultipartForm,
-        text::Text,
-    },
+use actix_files::Files;
+use actix_multipart::form::{
+    tempfile::{TempFile, TempFileConfig},
+    text::Text,
+    MultipartForm,
 };
-use serde_derive::Serialize;
+use actix_web::{middleware, web, App, Error, HttpResponse, HttpServer, Responder};
 use mime_guess::from_path;
 use rust_embed::Embed;
+use serde_derive::Serialize;
 
 mod merge;
-
 
 #[derive(Embed)]
 #[folder = "public/"]
@@ -42,7 +39,8 @@ struct Response<T> {
 struct UploadForm {
     source_file: TempFile,
     ref_file: TempFile,
-    column: Text<String>,
+    ref_column: Text<String>,
+    fill_columns: Text<String>,
 }
 
 async fn handle_merge_post(
@@ -77,10 +75,25 @@ async fn handle_merge_post(
         return Ok(HttpResponse::BadRequest().body("Reference file size is zero"));
     }
 
-    if form.column.len() == 0 {
-        Ok(HttpResponse::BadRequest().body("column is missing"))
+    if form.ref_column.len() == 0 {
+        return Ok(HttpResponse::BadRequest().body("Reference Column is missing"));
+    }
+
+    if form.fill_columns.len() == 0 {
+        return Ok(HttpResponse::BadRequest().body("To be Filled Columns is missing"));
     } else {
-        if let Ok(()) = merge::merge(&source_file, &ref_file, form.column.as_str(), &output_file) {
+        let mut fill_columns: Vec<&str> = form.fill_columns.split('|').collect();
+        fill_columns.retain(|&s| !s.is_empty());
+        if fill_columns.is_empty() {
+            return Ok(HttpResponse::BadRequest().body("To be Filled Columns is invalid"));
+        }
+        if let Ok(()) = merge::merge(
+            &source_file,
+            &ref_file,
+            form.ref_column.as_str(),
+            fill_columns.as_slice(),
+            &output_file,
+        ) {
             let components: Vec<&str> = output_file.split('/').collect();
             if let Some(filename) = components.iter().last() {
                 Ok(HttpResponse::Ok().json(Response {
@@ -113,7 +126,7 @@ async fn main() -> std::io::Result<()> {
     std::fs::create_dir_all("/tmp/xlsx_merge/upload")?;
     std::fs::create_dir_all("/tmp/xlsx_merge/output")?;
 
-    log::info!("starting HTTP server at http://localhost:8080");
+    log::info!("starting HTTP server at http://0.0.0.0:8080");
 
     HttpServer::new(|| {
         App::new()
@@ -123,8 +136,8 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/merge").route(web::post().to(handle_merge_post)))
             .service(Files::new("/output", "/tmp/xlsx_merge/output/"))
     })
-        .bind(("0.0.0.0", 8080))?
-        .workers(2)
-        .run()
-        .await
+    .bind(("0.0.0.0", 8080))?
+    .workers(2)
+    .run()
+    .await
 }

@@ -1,8 +1,8 @@
+use calamine::{open_workbook_auto, Error, Reader};
+use glob::GlobError;
 use std::collections::HashMap;
 use std::env;
-use std::path::{PathBuf};
-use calamine::{open_workbook_auto, Error, Reader};
-use glob::{GlobError};
+use std::path::PathBuf;
 use xlsxwriter::{Format, Workbook, XlsxError};
 
 #[derive(Debug)]
@@ -13,13 +13,19 @@ pub(crate) enum FileStatus {
     Glob(GlobError),
 }
 
-pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str, output_file: &str) -> Result<(), FileStatus> {
+pub(crate) fn merge(
+    source_file: &str,
+    ref_file: &str,
+    ref_column: &str,
+    fill_columns: &[&str],
+    output_file: &str,
+) -> Result<(), FileStatus> {
     let current_dir = env::current_dir().expect("Failed to get current directory");
     let from_file = current_dir.join(ref_file);
     let to_file = current_dir.join(source_file);
 
     let from_file_clone = from_file.clone();
-    let from_data = match read_to_hash_map(from_file) {
+    let from_data = match read_to_hash_map(from_file, ref_column) {
         Ok(data) => {
             println!("Read {} Ok", from_file_clone.display());
             data
@@ -31,7 +37,7 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str, output_file
     };
 
     let to_file_clone = to_file.clone();
-    let to_data = match read_to_hash_map(to_file.clone()) {
+    let to_data = match read_to_hash_map(to_file.clone(), ref_column) {
         Ok(data) => {
             println!("Read {:?} Ok", to_file_clone.display());
             data
@@ -52,7 +58,14 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str, output_file
 
     let target_file = output_file;
 
-    match write_to_file(target_file, from_data, to_data, column, headers) {
+    match write_to_file(
+        target_file,
+        from_data,
+        to_data,
+        fill_columns,
+        headers,
+        ref_column,
+    ) {
         Ok(()) => {}
         Err(e) => {
             println!("Error occur: {:?}", e);
@@ -64,7 +77,14 @@ pub(crate) fn merge(source_file: &str, ref_file: &str, column: &str, output_file
     Ok(())
 }
 
-fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to: HashMap<String, HashMap<String, String>>, update_column: &str, headers: Vec<String>) -> Result<(), XlsxError> {
+fn write_to_file(
+    file: &str,
+    from: HashMap<String, HashMap<String, String>>,
+    to: HashMap<String, HashMap<String, String>>,
+    update_columns: &[&str],
+    headers: Vec<String>,
+    hash_key: &str,
+) -> Result<(), XlsxError> {
     let header_note = "1、请上传小于 9999 条，99 MB的 EXCEL 文件。\n2、请在语言列增加对应的翻译，实现多语言的翻译配置。修改文案或清空文案都会覆盖原始数据，默认语言必须录入对应的翻译，否则会导致该行数据导入失败。新增加行数据将不会新增词条。\n3、请勿变更列数据的位置，请勿删除此行。";
 
     let workbook = Workbook::new(file)?;
@@ -73,9 +93,14 @@ fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to:
     let lang_count = headers.len() as u16;
 
     // Header Note
-    sheet.merge_range(0, 0, 0, lang_count - 1, header_note, Some(
-        &Format::new().set_bold().set_text_wrap()
-    ))?;
+    sheet.merge_range(
+        0,
+        0,
+        0,
+        lang_count - 1,
+        header_note,
+        Some(&Format::new().set_bold().set_text_wrap()),
+    )?;
     sheet.set_row(0, 50.0, None)?;
 
     // Header
@@ -89,17 +114,23 @@ fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to:
         for (col_i, header) in headers.iter().enumerate() {
             let value;
             let default_value = String::new();
-            if header == update_column {
+
+            if header == "key" {
+                // Never change target key
+                value = row_data.get("key").unwrap_or(&default_value);
+            } else if header == hash_key {
+                value = key;
+            } else if update_columns.contains(&header.as_str()) {
                 match from.get(key) {
                     None => {
-                        value = &default_value;
+                        // Preserve old value
+                        value = row_data.get(header).unwrap_or(&default_value);
                     }
                     Some(to_row) => {
+                        // Update value
                         value = to_row.get(header).unwrap_or(&default_value);
                     }
                 }
-            } else if header == "key" {
-                value = key;
             } else {
                 value = row_data.get(header).unwrap_or(&default_value);
             }
@@ -112,7 +143,10 @@ fn write_to_file(file: &str, from: HashMap<String, HashMap<String, String>>, to:
     Ok(())
 }
 
-fn read_to_hash_map(f: PathBuf) -> Result<HashMap<String, HashMap<String, String>>, FileStatus> {
+fn read_to_hash_map(
+    f: PathBuf,
+    hash_key: &str,
+) -> Result<HashMap<String, HashMap<String, String>>, FileStatus> {
     println!("Opening {:?}", f.display());
     let mut xl = open_workbook_auto(&f).unwrap();
 
@@ -122,7 +156,7 @@ fn read_to_hash_map(f: PathBuf) -> Result<HashMap<String, HashMap<String, String
         let range = xl.worksheet_range(sheet).expect("Cannot read sheet");
 
         let mut headers: Vec<String> = Vec::new();
-        let key_column = "key"; // Replace with the actual key column name
+        let hash_key_column = hash_key;
 
         for (row_index, row) in range.rows().enumerate() {
             if row_index == 0 {
@@ -135,7 +169,7 @@ fn read_to_hash_map(f: PathBuf) -> Result<HashMap<String, HashMap<String, String
 
                 for (i, cell) in row.iter().enumerate() {
                     let header = &headers[i];
-                    if header == key_column {
+                    if header == hash_key_column {
                         key_value = cell.to_string();
                     } else {
                         row_data.insert(header.clone(), cell.to_string());

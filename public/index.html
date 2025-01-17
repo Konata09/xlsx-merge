@@ -73,8 +73,10 @@
         <input type="file" id="source_file" name="source_file" accept=".xlsx"><br>
         <label for="ref_file">Reference File:</label>
         <input type="file" id="ref_file" name="ref_file" accept=".xlsx"><br>
-        <label for="column">Column:</label>
-        <input type="text" id="column" name="column"><br>
+        <label for="ref_column">Reference Column:</label>
+        <input type="text" id="ref_column" name="ref_column" placeholder="key"><br>
+        <label for="fill_columns">To be Filled Columns:</label>
+        <input type="text" id="fill_columns" name="fill_columns" placeholder="印度尼西亚语|泰语"><br>
         <input type="submit" value="Merge" id="submit">
     </form>
 </div>
@@ -99,13 +101,18 @@
             method: 'POST',
             body: formData
         });
-        const result = await response.json();
-        if (response.ok && result.ret == 0) {
-            downloadFile(result.data);
-            document.getElementById('source_file').value = '';
-            document.getElementById('ref_file').value = '';
-        } else {
-            alert(result.msg)
+        const res = await response.text()
+        try {
+            const result = JSON.parse(res)
+            if (response.ok && result.ret === 0) {
+                downloadFile(result.data);
+                document.getElementById('source_file').value = '';
+                document.getElementById('ref_file').value = '';
+            } else {
+                alert(response.msg)
+            }
+        } catch (e) {
+            alert(res)
         }
         document.getElementById('submit').disabled = false;
     });
