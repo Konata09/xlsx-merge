@@ -115,10 +115,7 @@ fn write_to_file(
             let value;
             let default_value = String::new();
 
-            if header == "key" {
-                // Never change target key
-                value = row_data.get("key").unwrap_or(&default_value);
-            } else if header == hash_key {
+            if header == hash_key {
                 value = key;
             } else if update_columns.contains(&header.as_str()) {
                 match from.get(key) {
