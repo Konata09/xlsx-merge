@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Extract version from Cargo.toml
         id: extract_version
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload artifact
         if: steps.check_version.outputs.should_release == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: xlsx_merge-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/xlsx_merge
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
