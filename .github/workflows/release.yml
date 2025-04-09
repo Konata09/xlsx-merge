@@ -99,13 +99,13 @@ jobs:
           fetch-depth: 0
 
       - name: Download x86_64 artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: xlsx_merge-x86_64-unknown-linux-gnu
           path: ./artifact/x86_64
 
       - name: Download aarch64 artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: xlsx_merge-aarch64-unknown-linux-gnu
           path: ./artifact/aarch64
