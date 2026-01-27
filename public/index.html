@@ -37,11 +37,102 @@
         color: #555;
     }
 
-    input[type="text"], input[type="file"] {
+    input[type="text"], input[type="file"], textarea {
         margin-bottom: 15px;
         padding: 10px;
         border: 1px solid #ccc;
         border-radius: 4px;
+        font-family: inherit;
+    }
+
+    textarea {
+        resize: vertical;
+        min-height: 120px;
+        font-family: 'Menlo', 'Monaco', 'Consolas', 'Ubuntu Mono', 'DejaVu Sans Mono', 'Courier New', monospace;
+    }
+
+    .tabs {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #ddd;
+    }
+
+    .tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border: none;
+        background: none;
+        font-size: 16px;
+        color: #666;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+    }
+
+    .tab:hover {
+        color: #333;
+    }
+
+    .tab.active {
+        color: #28a745;
+        border-bottom-color: #28a745;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .hint {
+        font-size: 12px;
+        color: #888;
+        margin-top: -10px;
+        margin-bottom: 15px;
+    }
+
+    .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 15px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: #fafafa;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .checkbox-group label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-bottom: 0;
+    }
+
+    .checkbox-group label:hover {
+        background-color: #f0f0f0;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+        margin: 0;
+    }
+
+    .checkbox-group.hidden {
+        display: none;
+    }
+
+    .loading {
+        color: #888;
+        font-style: italic;
+        padding: 10px;
     }
 
     input[type="submit"] {
@@ -57,6 +148,27 @@
         background-color: #218838;
     }
 
+    .btn-secondary {
+        padding: 8px 15px;
+        background-color: #6c757d;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+
+    .btn-secondary:hover {
+        background-color: #5a6268;
+    }
+
+    .extract-result {
+        font-size: 12px;
+        color: #28a745;
+        margin-left: 10px;
+    }
+
     .download-link a {
         color: #007bff;
         text-decoration: none;
@@ -67,18 +179,50 @@
     }
 </style>
 <div class="container">
-    <h1>Merge XLSX Files</h1>
-    <form id="mergeForm" action="/merge" method="post" enctype="multipart/form-data">
-        <label for="source_file">Source File:</label>
-        <input type="file" id="source_file" name="source_file" accept=".xlsx"><br>
-        <label for="ref_file">Reference File:</label>
-        <input type="file" id="ref_file" name="ref_file" accept=".xlsx"><br>
-        <label for="ref_column">Reference Column:</label>
-        <input type="text" id="ref_column" name="ref_column" placeholder="key"><br>
-        <label for="fill_columns">To be Filled Columns:</label>
-        <input type="text" id="fill_columns" name="fill_columns" placeholder="印度尼西亚语|泰语"><br>
-        <input type="submit" value="Merge" id="submit">
-    </form>
+    <h1>XLSX Tools</h1>
+    
+    <div class="tabs">
+        <button class="tab active" data-tab="merge">Merge Files</button>
+        <button class="tab" data-tab="filter">Filter by Keys</button>
+    </div>
+
+    <div id="merge" class="tab-content active">
+        <form id="mergeForm" action="/merge" method="post" enctype="multipart/form-data">
+            <label for="source_file">Source File:</label>
+            <input type="file" id="source_file" name="source_file" accept=".xlsx"><br>
+            <label for="ref_file">Reference File:</label>
+            <input type="file" id="ref_file" name="ref_file" accept=".xlsx"><br>
+            <label for="ref_column">Reference Column:</label>
+            <input type="text" id="ref_column" name="ref_column" placeholder="key"><br>
+            <label for="fill_columns">To be Filled Columns:</label>
+            <input type="text" id="fill_columns" name="fill_columns" placeholder="印度尼西亚语|泰语"><br>
+            <input type="submit" value="Merge" id="mergeSubmit">
+        </form>
+    </div>
+
+    <div id="filter" class="tab-content">
+        <form id="filterForm" action="/filter" method="post" enctype="multipart/form-data">
+            <label for="filter_source_file">Source File:</label>
+            <input type="file" id="filter_source_file" name="source_file" accept=".xlsx"><br>
+            
+            <div id="columnsSection" style="display: none;">
+                <label>Languages to Keep:</label>
+                <div id="columnsLoading" class="loading">Loading columns...</div>
+                <div id="columnsCheckboxes" class="checkbox-group hidden"></div>
+                <p class="hint">Uncheck the languages you want to exclude from the output file.</p>
+            </div>
+            
+            <label for="keys">Keys to Keep (one per line):</label>
+            <textarea id="keys" name="keys" placeholder="key1&#10;key2&#10;key3&#10;&#10;Or paste code containing max.i18n.getText('KEY_ID') and click Extract Keys"></textarea>
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                <button type="button" class="btn-secondary" id="extractKeysBtn">Extract Keys from Code</button>
+                <span id="extractResult" class="extract-result"></span>
+            </div>
+            <p class="hint">Paste keys directly (one per line), or paste code containing max.i18n.getText() calls and click "Extract Keys from Code" to extract them.</p>
+            <input type="hidden" id="columns" name="columns" value="">
+            <input type="submit" value="Filter" id="filterSubmit">
+        </form>
+    </div>
 </div>
 
 <script>
@@ -93,9 +237,20 @@
         document.body.removeChild(a);
     }
 
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById(this.dataset.tab).classList.add('active');
+        });
+    });
+
+    // Merge form submission
     document.getElementById('mergeForm').addEventListener('submit', async function (event) {
         event.preventDefault();
-        document.getElementById('submit').disabled = true;
+        document.getElementById('mergeSubmit').disabled = true;
         const formData = new FormData(this);
         const response = await fetch('/merge', {
             method: 'POST',
@@ -109,12 +264,139 @@
                 document.getElementById('source_file').value = '';
                 document.getElementById('ref_file').value = '';
             } else {
-                alert(response.msg)
+                alert(result.msg || 'Error occurred')
             }
         } catch (e) {
             alert(res)
         }
-        document.getElementById('submit').disabled = false;
+        document.getElementById('mergeSubmit').disabled = false;
+    });
+
+    // Extract keys from code containing max.i18n.getText('KEY_ID')
+    document.getElementById('extractKeysBtn').addEventListener('click', function() {
+        const textarea = document.getElementById('keys');
+        const text = textarea.value;
+        
+        // Match max.i18n.getText with single, double, or backtick quotes
+        // KEY_ID is exactly 40 characters
+        const regex = /max\.i18n\.getText\s*\(\s*['"`]([a-zA-Z0-9_-]{40})['"`]\s*\)/g;
+        
+        const keys = new Set();
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            keys.add(match[1]);
+        }
+        
+        const resultSpan = document.getElementById('extractResult');
+        
+        if (keys.size > 0) {
+            textarea.value = Array.from(keys).join('\n');
+            resultSpan.textContent = `Extracted ${keys.size} unique key(s)`;
+            resultSpan.style.color = '#28a745';
+        } else {
+            resultSpan.textContent = 'No keys found matching pattern max.i18n.getText()';
+            resultSpan.style.color = '#dc3545';
+        }
+        
+        // Clear the result message after 5 seconds
+        setTimeout(() => {
+            resultSpan.textContent = '';
+        }, 5000);
+    });
+
+    // Store the uploaded file for reuse
+    let uploadedFilterFile = null;
+
+    // Handle file upload and fetch headers
+    document.getElementById('filter_source_file').addEventListener('change', async function(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            document.getElementById('columnsSection').style.display = 'none';
+            uploadedFilterFile = null;
+            return;
+        }
+
+        uploadedFilterFile = file;
+        document.getElementById('columnsSection').style.display = 'block';
+        document.getElementById('columnsLoading').style.display = 'block';
+        document.getElementById('columnsCheckboxes').classList.add('hidden');
+
+        const formData = new FormData();
+        formData.append('source_file', file);
+
+        try {
+            const response = await fetch('/headers', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (response.ok && result.ret === 0) {
+                const checkboxContainer = document.getElementById('columnsCheckboxes');
+                checkboxContainer.innerHTML = '';
+                
+                result.data.forEach(column => {
+                    const label = document.createElement('label');
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = column;
+                    checkbox.checked = true;
+                    checkbox.name = 'column_checkbox';
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(column));
+                    checkboxContainer.appendChild(label);
+                });
+
+                document.getElementById('columnsLoading').style.display = 'none';
+                checkboxContainer.classList.remove('hidden');
+            } else {
+                alert(result.msg || 'Error fetching columns');
+                document.getElementById('columnsSection').style.display = 'none';
+            }
+        } catch (e) {
+            alert('Error fetching columns: ' + e.message);
+            document.getElementById('columnsSection').style.display = 'none';
+        }
+    });
+
+    // Filter form submission
+    document.getElementById('filterForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        document.getElementById('filterSubmit').disabled = true;
+
+        // Collect selected columns
+        const checkboxes = document.querySelectorAll('input[name="column_checkbox"]:checked');
+        const selectedColumns = Array.from(checkboxes).map(cb => cb.value).join('|');
+        document.getElementById('columns').value = selectedColumns;
+
+        const formData = new FormData(this);
+        
+        // Re-add the file since we need to send it again
+        if (uploadedFilterFile) {
+            formData.set('source_file', uploadedFilterFile);
+        }
+
+        const response = await fetch('/filter', {
+            method: 'POST',
+            body: formData
+        });
+        const res = await response.text()
+        try {
+            const result = JSON.parse(res)
+            if (response.ok && result.ret === 0) {
+                downloadFile(result.data);
+                document.getElementById('filter_source_file').value = '';
+                document.getElementById('keys').value = '';
+                document.getElementById('columnsSection').style.display = 'none';
+                document.getElementById('columnsCheckboxes').innerHTML = '';
+                uploadedFilterFile = null;
+            } else {
+                alert(result.msg || 'Error occurred')
+            }
+        } catch (e) {
+            alert(res)
+        }
+        document.getElementById('filterSubmit').disabled = false;
     });
 </script>
 </div>

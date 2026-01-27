@@ -9,6 +9,7 @@ use mime_guess::from_path;
 use rust_embed::Embed;
 use serde_derive::Serialize;
 
+mod filter_by_keys;
 mod merge;
 
 #[derive(Embed)]
@@ -41,6 +42,18 @@ struct UploadForm {
     ref_file: TempFile,
     ref_column: Text<String>,
     fill_columns: Text<String>,
+}
+
+#[derive(Debug, MultipartForm)]
+struct FilterForm {
+    source_file: TempFile,
+    keys: Text<String>,
+    columns: Text<String>,
+}
+
+#[derive(Debug, MultipartForm)]
+struct HeadersForm {
+    source_file: TempFile,
 }
 
 async fn handle_merge_post(
@@ -118,6 +131,126 @@ async fn handle_merge_post(
     }
 }
 
+async fn handle_get_headers(
+    MultipartForm(form): MultipartForm<HeadersForm>,
+) -> Result<impl Responder, Error> {
+    let source_file;
+
+    if form.source_file.size > 0 {
+        if let Some(file_name) = form.source_file.file_name {
+            let path = format!("/tmp/xlsx_merge/upload/{}", file_name);
+            source_file = path.clone();
+            form.source_file.file.persist(path).unwrap();
+        } else {
+            return Ok(HttpResponse::BadRequest().body("Source file name is missing"));
+        }
+    } else {
+        return Ok(HttpResponse::BadRequest().body("Source file size is zero"));
+    }
+
+    match filter_by_keys::get_headers(&source_file) {
+        Ok(headers) => {
+            // Filter out 'key' and '备注' columns from the list
+            let language_columns: Vec<String> = headers
+                .into_iter()
+                .filter(|h| h != "key" && h != "备注")
+                .collect();
+            Ok(HttpResponse::Ok().json(Response {
+                data: language_columns,
+                ret: 0,
+                msg: String::new(),
+            }))
+        }
+        Err(_) => Ok(HttpResponse::Ok().json(Response {
+            data: Vec::<String>::new(),
+            ret: -1,
+            msg: "Error reading headers from file".to_string(),
+        })),
+    }
+}
+
+async fn handle_filter_post(
+    MultipartForm(form): MultipartForm<FilterForm>,
+) -> Result<impl Responder, Error> {
+    let output_file;
+    let source_file;
+
+    if form.source_file.size > 0 {
+        if let Some(file_name) = form.source_file.file_name {
+            let path = format!("/tmp/xlsx_merge/upload/{}", file_name);
+            source_file = path.clone();
+            form.source_file.file.persist(path).unwrap();
+            output_file = format!("/tmp/xlsx_merge/output/{}_filtered.xlsx", file_name);
+        } else {
+            return Ok(HttpResponse::BadRequest().body("Source file name is missing"));
+        }
+    } else {
+        return Ok(HttpResponse::BadRequest().body("Source file size is zero"));
+    }
+
+    if form.keys.len() == 0 {
+        return Ok(HttpResponse::BadRequest().body("Keys are missing"));
+    }
+
+    // Parse keys from the textarea (one key per line)
+    let keys: Vec<String> = form
+        .keys
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if keys.is_empty() {
+        return Ok(HttpResponse::BadRequest().body("No valid keys provided"));
+    }
+
+    // Parse columns to keep (pipe-separated)
+    let columns_to_keep: Option<Vec<String>> = if form.columns.len() > 0 {
+        let cols: Vec<String> = form
+            .columns
+            .split('|')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if cols.is_empty() {
+            None
+        } else {
+            Some(cols)
+        }
+    } else {
+        None
+    };
+
+    if let Ok(()) = filter_by_keys::filter_by_keys(
+        &source_file,
+        &keys,
+        "key",
+        columns_to_keep.as_deref(),
+        &output_file,
+    ) {
+        let components: Vec<&str> = output_file.split('/').collect();
+        if let Some(filename) = components.iter().last() {
+            Ok(HttpResponse::Ok().json(Response {
+                data: format!("/output/{}", filename),
+                ret: 0,
+                msg: String::new(),
+            }))
+        } else {
+            Ok(HttpResponse::Ok().json(Response {
+                data: (),
+                ret: -1,
+                msg: "Error when parsing output file".to_string(),
+            }))
+        }
+    } else {
+        Ok(HttpResponse::Ok().json(Response {
+            data: (),
+            ret: -1,
+            msg: "Error when filtering file".to_string(),
+        }))
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
@@ -134,6 +267,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(TempFileConfig::default().directory("/tmp/xlsx_merge"))
             .service(web::resource("/").route(web::get().to(index)))
             .service(web::resource("/merge").route(web::post().to(handle_merge_post)))
+            .service(web::resource("/headers").route(web::post().to(handle_get_headers)))
+            .service(web::resource("/filter").route(web::post().to(handle_filter_post)))
             .service(Files::new("/output", "/tmp/xlsx_merge/output/"))
     })
     .bind(("0.0.0.0", 8080))?
