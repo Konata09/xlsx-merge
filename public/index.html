@@ -279,7 +279,7 @@
         
         // Match max.i18n.getText with single, double, or backtick quotes
         // KEY_ID is exactly 40 characters
-        const regex = /max\.i18n\.getText\s*\(\s*['"`]([a-zA-Z0-9_-]{40})['"`]\s*\)/g;
+        const regex = /max\.i18n\.getText\s*\(\s*['"`]([a-z0-9]{40})['"`]\s*\)/g;
         
         const keys = new Set();
         let match;
