@@ -37,7 +37,7 @@
         color: #555;
     }
 
-    input[type="text"], input[type="file"], textarea {
+    input[type="text"], input[type="file"], textarea, select {
         margin-bottom: 15px;
         padding: 10px;
         border: 1px solid #ccc;
@@ -135,6 +135,32 @@
         padding: 10px;
     }
 
+    .progress-box {
+        display: none;
+        margin-bottom: 15px;
+    }
+
+    .progress-text {
+        font-size: 12px;
+        color: #555;
+        margin-bottom: 6px;
+    }
+
+    .progress-bar-track {
+        width: 100%;
+        height: 8px;
+        background-color: #e9ecef;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        width: 0;
+        height: 100%;
+        background-color: #28a745;
+        transition: width 0.2s ease;
+    }
+
     input[type="submit"] {
         padding: 10px;
         background-color: #28a745;
@@ -184,6 +210,7 @@
     <div class="tabs">
         <button class="tab active" data-tab="merge">Merge Files</button>
         <button class="tab" data-tab="filter">Filter by Keys</button>
+        <button class="tab" data-tab="translate">AI Translate</button>
     </div>
 
     <div id="merge" class="tab-content active">
@@ -221,6 +248,32 @@
             <p class="hint">Paste keys directly (one per line), or paste code containing max.i18n.getText() calls and click "Extract Keys from Code" to extract them.</p>
             <input type="hidden" id="columns" name="columns" value="">
             <input type="submit" value="Filter" id="filterSubmit">
+        </form>
+    </div>
+
+    <div id="translate" class="tab-content">
+        <form id="translateForm" action="/ai-translate" method="post" enctype="multipart/form-data">
+            <label for="translate_source_file">Source File:</label>
+            <input type="file" id="translate_source_file" name="source_file" accept=".xlsx"><br>
+
+            <div id="translateLanguagesSection" style="display: none;">
+                <label for="source_lang">Reference Language:</label>
+                <select id="source_lang" name="source_lang"></select>
+
+                <label for="target_lang">Target Language:</label>
+                <select id="target_lang" name="target_lang"></select>
+
+                <p class="hint">Both languages must already exist in the uploaded xlsx. Existing target translations will be skipped.</p>
+            </div>
+
+            <input type="submit" value="AI Translate" id="translateSubmit">
+
+            <div id="translateProgress" class="progress-box">
+                <div id="translateProgressText" class="progress-text">Waiting for task to start...</div>
+                <div class="progress-bar-track">
+                    <div id="translateProgressFill" class="progress-bar-fill"></div>
+                </div>
+            </div>
         </form>
     </div>
 </div>
@@ -306,6 +359,9 @@
 
     // Store the uploaded file for reuse
     let uploadedFilterFile = null;
+    let uploadedTranslateFile = null;
+    let translatePollingTimer = null;
+    let activeTranslateJobId = null;
 
     // Handle file upload and fetch headers
     document.getElementById('filter_source_file').addEventListener('change', async function(event) {
@@ -398,7 +454,237 @@
         }
         document.getElementById('filterSubmit').disabled = false;
     });
+
+    function buildLanguageOptions(selectEl, languages) {
+        selectEl.innerHTML = '';
+        languages.forEach(language => {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            selectEl.appendChild(option);
+        });
+    }
+
+    function stopTranslatePolling() {
+        if (translatePollingTimer) {
+            clearInterval(translatePollingTimer);
+            translatePollingTimer = null;
+        }
+        activeTranslateJobId = null;
+    }
+
+    function setTranslateProgress(text, percent) {
+        const box = document.getElementById('translateProgress');
+        const textEl = document.getElementById('translateProgressText');
+        const fillEl = document.getElementById('translateProgressFill');
+        box.style.display = 'block';
+        textEl.textContent = text;
+        fillEl.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+
+    function hideTranslateProgress() {
+        const box = document.getElementById('translateProgress');
+        const fillEl = document.getElementById('translateProgressFill');
+        box.style.display = 'none';
+        fillEl.style.width = '0%';
+    }
+
+    async function pollTranslateProgress(jobId, submitBtn) {
+        try {
+            const response = await fetch(`/ai-translate/progress/${encodeURIComponent(jobId)}`);
+            const raw = await response.text();
+            const result = JSON.parse(raw);
+
+            if (!response.ok || result.ret !== 0) {
+                stopTranslatePolling();
+                submitBtn.disabled = false;
+                alert(result.msg || 'Failed to get translation progress');
+                return;
+            }
+
+            const data = result.data || {};
+            const total = Number(data.total || 0);
+            const processed = Number(data.processed || 0);
+            const translated = Number(data.translated || 0);
+            const skipped = Number(data.skipped || 0);
+            const status = data.status || 'queued';
+            const percentage = total > 0 ? Math.round((processed / total) * 100) : (status === 'completed' ? 100 : 0);
+
+            if (status === 'queued') {
+                setTranslateProgress('Task queued...', 0);
+                return;
+            }
+
+            if (status === 'running') {
+                setTranslateProgress(
+                    `Translating ${processed}/${total} (${percentage}%), translated ${translated}, skipped ${skipped}`,
+                    percentage
+                );
+                return;
+            }
+
+            if (status === 'completed') {
+                stopTranslatePolling();
+                submitBtn.disabled = false;
+                setTranslateProgress(
+                    `Completed: translated ${translated}, skipped ${skipped}`,
+                    100
+                );
+
+                if (data.download_url) {
+                    downloadFile(data.download_url);
+                }
+                if (data.message) {
+                    alert(data.message);
+                }
+
+                document.getElementById('translate_source_file').value = '';
+                document.getElementById('source_lang').innerHTML = '';
+                document.getElementById('target_lang').innerHTML = '';
+                document.getElementById('translateLanguagesSection').style.display = 'none';
+                uploadedTranslateFile = null;
+                return;
+            }
+
+            if (status === 'failed') {
+                stopTranslatePolling();
+                submitBtn.disabled = false;
+                setTranslateProgress('Translation failed', 0);
+                alert(data.message || 'AI translation failed');
+                return;
+            }
+
+            setTranslateProgress(`Unknown status: ${status}`, 0);
+        } catch (e) {
+            stopTranslatePolling();
+            submitBtn.disabled = false;
+            alert('Error polling translation progress: ' + e.message);
+        }
+    }
+
+    document.getElementById('translate_source_file').addEventListener('change', async function(event) {
+        const file = event.target.files[0];
+        const sourceSelect = document.getElementById('source_lang');
+        const targetSelect = document.getElementById('target_lang');
+        const section = document.getElementById('translateLanguagesSection');
+
+        stopTranslatePolling();
+        hideTranslateProgress();
+
+        if (!file) {
+            uploadedTranslateFile = null;
+            section.style.display = 'none';
+            sourceSelect.innerHTML = '';
+            targetSelect.innerHTML = '';
+            return;
+        }
+
+        uploadedTranslateFile = file;
+        section.style.display = 'none';
+        sourceSelect.innerHTML = '';
+        targetSelect.innerHTML = '';
+
+        const formData = new FormData();
+        formData.append('source_file', file);
+
+        try {
+            const response = await fetch('/headers', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+
+            if (!response.ok || result.ret !== 0) {
+                alert(result.msg || 'Error fetching languages');
+                uploadedTranslateFile = null;
+                section.style.display = 'none';
+                return;
+            }
+
+            if (!Array.isArray(result.data) || result.data.length < 2) {
+                alert('Need at least two language columns in the xlsx file');
+                uploadedTranslateFile = null;
+                section.style.display = 'none';
+                return;
+            }
+
+            buildLanguageOptions(sourceSelect, result.data);
+            buildLanguageOptions(targetSelect, result.data);
+
+            if (result.data.length > 1) {
+                targetSelect.selectedIndex = 1;
+            }
+
+            section.style.display = 'block';
+        } catch (e) {
+            alert('Error fetching languages: ' + e.message);
+            uploadedTranslateFile = null;
+            section.style.display = 'none';
+        }
+    });
+
+    document.getElementById('translateForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const submitBtn = document.getElementById('translateSubmit');
+
+        if (translatePollingTimer) {
+            alert('A translation task is already running');
+            return;
+        }
+
+        submitBtn.disabled = true;
+
+        const sourceLang = document.getElementById('source_lang').value;
+        const targetLang = document.getElementById('target_lang').value;
+        if (!uploadedTranslateFile) {
+            alert('Please select an xlsx file first');
+            submitBtn.disabled = false;
+            return;
+        }
+        if (!sourceLang || !targetLang) {
+            alert('Please select both source and target languages');
+            submitBtn.disabled = false;
+            return;
+        }
+        if (sourceLang === targetLang) {
+            alert('Reference language and target language must be different');
+            submitBtn.disabled = false;
+            return;
+        }
+
+        const formData = new FormData(this);
+        formData.set('source_file', uploadedTranslateFile);
+
+        try {
+            setTranslateProgress('Creating translation task...', 0);
+            const response = await fetch('/ai-translate', {
+                method: 'POST',
+                body: formData
+            });
+            const raw = await response.text();
+            const result = JSON.parse(raw);
+
+            if (response.ok && result.ret === 0 && result.data && result.data.job_id) {
+                activeTranslateJobId = result.data.job_id;
+                setTranslateProgress('Task started, waiting for progress...', 0);
+
+                await pollTranslateProgress(activeTranslateJobId, submitBtn);
+                if (activeTranslateJobId) {
+                    translatePollingTimer = setInterval(() => {
+                        pollTranslateProgress(activeTranslateJobId, submitBtn);
+                    }, 1000);
+                }
+            } else {
+                alert(result.msg || 'Error occurred');
+                submitBtn.disabled = false;
+                hideTranslateProgress();
+            }
+        } catch (e) {
+            alert('Error occurred: ' + e.message);
+            submitBtn.disabled = false;
+            hideTranslateProgress();
+        }
+    });
 </script>
-</div>
 </body>
 </html>
