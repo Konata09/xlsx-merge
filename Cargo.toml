@@ -1,6 +1,6 @@
 [package]
 name = "xlsx_merge"
-version = "1.1.9"
+version = "1.1.10"
 edition = "2021"
 exclude = ["tests/**/*"]
 
@@ -21,3 +21,5 @@ env_logger = "0.11.5"
 log = "0.4.22"
 rust-embed = "8.5"
 mime_guess = "2.0.5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1.0"
